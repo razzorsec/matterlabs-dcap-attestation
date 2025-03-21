@@ -1,4 +1,6 @@
 pragma solidity ^0.8.27;
+import "forge-std/Test.sol";
+
 import {CA} from "@automata-network/on-chain-pccs/Common.sol";
 
 import {
@@ -19,19 +21,20 @@ import {AutomataFmspcTcbDao} from "@automata-network/on-chain-pccs/automata_pccs
 import {PCCSRouter} from "./PCCSRouter.sol";
 import {AttestationEntrypointBase} from "./AttestationEntrypointBase.sol";
 import {HEADER_LENGTH, ENCLAVE_REPORT_LENGTH, SGX_TEE, TDX_TEE} from "./types/Constants.sol";
-import {BytesUtils} from "./utils/BytesUtils.sol";
 import {BELE} from "./utils/BELE.sol";
 import {ECDSA} from "solady/utils/ECDSA.sol";
 
-import {IEnclaveHashValidator} from "./interfaces/IEnclaveHashValidator.sol";
+import "./interfaces/IHashValidator.sol";
+import {TD10ReportBody} from "./types/V4Structs.sol";
 
 error InvalidP256Verifier();
-error InvalidEnclaveHashValidator();
+error InvalidHashValidator();
 error IncorrectVersion(uint256 version);
 error IncorrectMrEnclave(bytes32 mrEnclave);
 error VerificationFailed(bytes output);
 error InvalidSigner(address recoveredSigner);
-
+error InvalidTD10MrTd();
+error InvalidTD10RtMr(uint8 rtMrX);
 enum QuoteVerifierType{
     v3,
     v4
@@ -41,13 +44,19 @@ enum QuoteVerifierType{
  * @title MatterLabs DCAP Attestation
  * @dev Contract for handling attestation and verification using DCAP
  */
-contract MatterLabsDCAPAttestation is AttestationEntrypointBase{
-    using BytesUtils for bytes;
+contract MatterLabsDCAPAttestation is AttestationEntrypointBase, Test{
     using ECDSA for bytes32;
     
     uint256 constant MR_ENCLAVE_OFFSET = HEADER_LENGTH + 64;
     uint256 constant ENCLAVE_REPORT_DATA_OFFSET = HEADER_LENGTH + 320;
+    uint256 constant TD10_MRTD_OFFSET = HEADER_LENGTH + 136;
+    uint256 constant TD10_RTMR0_OFFSET = HEADER_LENGTH + 328;
+    uint256 constant TD10_RTMR1_OFFSET = TD10_RTMR0_OFFSET + 48;
+    uint256 constant TD10_RTMR2_OFFSET = TD10_RTMR1_OFFSET + 48;
+    uint256 constant TD10_RTMR3_OFFSET = TD10_RTMR2_OFFSET + 48;
     uint256 constant TD10_REPORT_DATA_OFFSET = HEADER_LENGTH + 520;
+    uint8 constant RTMR_ENUM_ERROR_INDEX = 2;
+
     address P256_VERIFIER;
     EnclaveIdentityHelper public enclaveIdHelper;
     FmspcTcbHelper public tcbHelper;
@@ -61,22 +70,22 @@ contract MatterLabsDCAPAttestation is AttestationEntrypointBase{
     AutomataFmspcTcbDao fmspcTcbDao;
 
     PCCSRouter public pccsRouter;
-    IEnclaveHashValidator enclaveHashValidator;
+    IHashValidator hashValidator;
 
     /**
      * @dev Initializes the contract with the P256 verifier and the Enclave Hash Validator and sets up dependencies.
      * @param _P256_Verifier Address of the P256 Verifier contract.
-     * @param _enclaveHashValidator Address of the Enclave Hash Validator contract.
+     * @param _hashValidator Address of the Enclave Hash Validator contract.
      */
     constructor(
         address _P256_Verifier,
-        address _enclaveHashValidator
+        address _hashValidator
     ) {
         require(_P256_Verifier.code.length > 0, InvalidP256Verifier());
         P256_VERIFIER = _P256_Verifier;
 
-        require(_enclaveHashValidator.code.length > 0, InvalidEnclaveHashValidator());
-        enclaveHashValidator = IEnclaveHashValidator(_enclaveHashValidator);
+        require(_hashValidator.code.length > 0, InvalidHashValidator());
+        hashValidator = IHashValidator(_hashValidator);
 
         enclaveIdHelper = new EnclaveIdentityHelper();
         tcbHelper = new FmspcTcbHelper();
@@ -115,27 +124,41 @@ contract MatterLabsDCAPAttestation is AttestationEntrypointBase{
         bytes4 teeType = bytes4(uint32(BELE.leBytesToBeUint(rawQuote[4:8])));
         if (verifierType == QuoteVerifierType.v3 || teeType == SGX_TEE){
             _checkMrEnclave(rawQuote);
-            _checkSigner(rawQuote, digest, signature);
+            uint256 reportDataOffset = ENCLAVE_REPORT_DATA_OFFSET;
+            _checkSigner(rawQuote, digest, signature, reportDataOffset);
         }
         else if(teeType == TDX_TEE){
-
+            _checkTD10Mr(rawQuote);
+            uint256 reportDataOffset = TD10_REPORT_DATA_OFFSET;
+            _checkSigner(rawQuote, digest, signature, reportDataOffset);
         }
-        
-
     }
 
     function _checkMrEnclave(bytes calldata rawQuote) internal view{
-        bytes32 mrEnclave = bytes32(rawQuote.substring(MR_ENCLAVE_OFFSET, 32));
-        require(enclaveHashValidator.isValidEnclaveHash(mrEnclave), IncorrectMrEnclave(mrEnclave));
-
+        bytes32 mrEnclave = bytes32(rawQuote[MR_ENCLAVE_OFFSET: MR_ENCLAVE_OFFSET + 32]);
+        require(hashValidator.isValidEnclaveHash(mrEnclave), IncorrectMrEnclave(mrEnclave));
     }
 
-    function _checkSigner(bytes calldata rawQuote, bytes32 digest, bytes calldata signature) internal view{
-        address signer = address(bytes20(rawQuote.substring(ENCLAVE_REPORT_DATA_OFFSET, 32)));
-        uint256 version = uint256(bytes32(rawQuote.substring(ENCLAVE_REPORT_DATA_OFFSET + 32, 32)));
+    function _checkSigner(bytes calldata rawQuote, bytes32 digest, bytes calldata signature, uint256 reportDataOffset) internal view{
+        address signer = address(bytes20(rawQuote[reportDataOffset: reportDataOffset + 32]));
+        uint256 version = uint256(bytes32(rawQuote[reportDataOffset + 32: reportDataOffset + 64]));
         require (version == 1, IncorrectVersion(version)); 
         address recovered = digest.recover(signature);
         require(recovered == signer, InvalidSigner(recovered));   
+    }
+
+    function _checkTD10Mr(bytes calldata rawQuote) internal view{
+        TD10ReportBody memory report;
+        report.mrTd = rawQuote[TD10_MRTD_OFFSET : TD10_MRTD_OFFSET + 48];
+        report.rtMr0 = rawQuote[TD10_RTMR0_OFFSET : TD10_RTMR1_OFFSET];
+        report.rtMr1 = rawQuote[TD10_RTMR1_OFFSET : TD10_RTMR2_OFFSET];
+        report.rtMr2 = rawQuote[TD10_RTMR2_OFFSET : TD10_RTMR3_OFFSET];
+        report.rtMr3 = rawQuote[TD10_RTMR3_OFFSET : TD10_RTMR3_OFFSET + 48];
+        TD10ReportError errorType = hashValidator.validateTD10ReportBody(report);
+        if (uint8(errorType) > 0){
+            if (errorType == TD10ReportError.InvalidMrTd) revert InvalidTD10MrTd();
+            revert InvalidTD10RtMr(uint8(errorType) - RTMR_ENUM_ERROR_INDEX);
+        }
     }
 
 
@@ -144,9 +167,9 @@ contract MatterLabsDCAPAttestation is AttestationEntrypointBase{
         P256_VERIFIER = _P256_VERIFIER;
     }
 
-    function updateEnclaveHashValidator(address _enclaveHashValidator) external onlyOwner{
-        require(_enclaveHashValidator.code.length > 0, InvalidEnclaveHashValidator());
-        enclaveHashValidator = IEnclaveHashValidator(_enclaveHashValidator);
+    function updateHashValidator(address _hashValidator) external onlyOwner{
+        require(_hashValidator.code.length > 0, InvalidHashValidator());
+        hashValidator = IHashValidator(_hashValidator);
     }
 
 
