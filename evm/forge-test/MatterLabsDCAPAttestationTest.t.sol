@@ -37,21 +37,17 @@ contract MatterLabsDCAPAttestationTest is Test{
         enclaveHashes[0] = bytes32(0xa0b1b069b01bdcf3c1517ef8d4543794a27ed4103e464be7c4afdc6136b42d66);
         hashValidator.addValidEnclaveHashes(enclaveHashes);
 
-        bytes[] memory mrTdHashes = new bytes[](1);
-        mrTdHashes[0] = hex'2a90c8fa38672cafd791d994beb6836b99383b2563736858632284f0f760a6446efd1e7ec457cf08b629ea630f7b4525';
-        hashValidator.addValidTD10MrTDHashes(mrTdHashes);
-
-        bytes[] memory rtMrXHashes = new bytes[](4);
-        rtMrXHashes[0] = hex'3300980705adf09d28b707b79699d9874892164280832be2c386a715b6e204e0897fb564a064f810659207ba862b304f';
-        rtMrXHashes[1] = hex'2daa36e3885103d31f986459a385b0959758e5fec9fc949707df9df5bb38e3ec334cd12b24b697b85fa5e2a7502ab859';
-        rtMrXHashes[2] = hex'000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000';
-        rtMrXHashes[3] = hex'aae435424c7aeb2f544a7ae029020cce17be971306f920eb96b40660734798ca1da4515acc9a4e3f5441d922800bcc89';
-        uint256[] memory rtMrX = new uint256[](4);
-        rtMrX[0] = 0;
-        rtMrX[1] = 1;
-        rtMrX[2] = 2;
-        rtMrX[3] = 3;
-        hashValidator.addValidRtMrHashes(rtMrX, rtMrXHashes);
+        bytes32[] memory tD10ReportBodyMrHashes = new bytes32[](1);
+        tD10ReportBodyMrHashes[0] = keccak256(
+            abi.encodePacked(
+                hex'2a90c8fa38672cafd791d994beb6836b99383b2563736858632284f0f760a6446efd1e7ec457cf08b629ea630f7b4525',
+                hex'3300980705adf09d28b707b79699d9874892164280832be2c386a715b6e204e0897fb564a064f810659207ba862b304f',
+                hex'2daa36e3885103d31f986459a385b0959758e5fec9fc949707df9df5bb38e3ec334cd12b24b697b85fa5e2a7502ab859',
+                hex'000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+                hex'aae435424c7aeb2f544a7ae029020cce17be971306f920eb96b40660734798ca1da4515acc9a4e3f5441d922800bcc89'
+            )
+        );
+        hashValidator.addValidTD10ReportBodyMrHashes(tD10ReportBodyMrHashes);
 
         attestation = new MatterLabsDCAPAttestation(P256_VERIFIER, address(hashValidator));
 
