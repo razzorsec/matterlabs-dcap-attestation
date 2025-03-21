@@ -137,4 +137,5 @@ contract HashValidator is Ownable, IHashValidator {
         if (!validRtMrHashes[3][report.rtMr3]) return TD10ReportError.InvalidRtMr3;
         return TD10ReportError.NoError;
     }
+    // match the entire set
 }
