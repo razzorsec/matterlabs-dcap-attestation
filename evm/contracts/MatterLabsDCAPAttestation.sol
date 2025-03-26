@@ -1,6 +1,4 @@
 pragma solidity ^0.8.27;
-import "forge-std/Test.sol";
-
 import {CA} from "@automata-network/on-chain-pccs/Common.sol";
 
 import {
@@ -24,7 +22,7 @@ import {HEADER_LENGTH, SGX_TEE, TDX_TEE} from "./types/Constants.sol";
 import {BELE} from "./utils/BELE.sol";
 import {ECDSA} from "solady/utils/ECDSA.sol";
 
-import {IHashValidator} from "./interfaces/IHashValidator.sol";
+import "./interfaces/IHashValidator.sol";
 
 error InvalidP256Verifier();
 error InvalidHashValidator();
@@ -34,16 +32,11 @@ error InvalidMrEnclave(bytes32 mrEnclave);
 error InvalidTD10ReportBodyMrHash(bytes32 tD10ReportBodyMrHash);
 error VerificationFailed(bytes output);
 
-enum QuoteVerifierType{
-    v3,
-    v4
-}
-
 /**
  * @title MatterLabs DCAP Attestation
  * @dev Contract for handling attestation and verification using DCAP
  */
-contract MatterLabsDCAPAttestation is AttestationEntrypointBase, Test{
+contract MatterLabsDCAPAttestation is AttestationEntrypointBase{
     using ECDSA for bytes32;
     
     uint256 constant MR_ENCLAVE_OFFSET = HEADER_LENGTH + 64;
@@ -115,21 +108,22 @@ contract MatterLabsDCAPAttestation is AttestationEntrypointBase, Test{
         pccsStorage.setCallerAuthorization(address(pccsRouter), true);
     }
 
-    function verifyAndAttestOnChain(bytes calldata rawQuote, bytes32 digest, bytes calldata signature, QuoteVerifierType verifierType) external{
-        (bool success, bytes memory output) = _verifyAndAttestOnChain(rawQuote);        
-        require(success, VerificationFailed(output));
-
+    function verifyAndAttestOnChain(bytes calldata rawQuote, bytes32 digest, bytes calldata signature) external{
+        uint16 quoteVersion = uint16(BELE.leBytesToBeUint(rawQuote[0:2]));
         bytes4 teeType = bytes4(uint32(BELE.leBytesToBeUint(rawQuote[4:8])));
-        if (verifierType == QuoteVerifierType.v3 || teeType == SGX_TEE){
+        if (quoteVersion == 3 || (quoteVersion == 4 && teeType == SGX_TEE)){
             _checkMrEnclave(rawQuote);
             uint256 reportDataOffset = ENCLAVE_REPORT_DATA_OFFSET;
             _checkSigner(rawQuote, digest, signature, reportDataOffset);
         }
-        else if(teeType == TDX_TEE){
+        else if(quoteVersion == 4 && teeType == TDX_TEE){
             _checkTD10Mr(rawQuote);
             uint256 reportDataOffset = TD10_REPORT_DATA_OFFSET;
             _checkSigner(rawQuote, digest, signature, reportDataOffset);
         }
+
+        (bool success, bytes memory output) = _verifyAndAttestOnChain(rawQuote);        
+        require(success, VerificationFailed(output));
     }
 
     function _checkMrEnclave(bytes calldata rawQuote) internal view{
@@ -168,8 +162,13 @@ contract MatterLabsDCAPAttestation is AttestationEntrypointBase, Test{
 
     // ============Functions to upsert Certificates to DAOs============
 
-    function upsertPcsCertificates(CA ca, bytes calldata cert) external returns (bytes32 attestationId){
-        attestationId = pcsDao.upsertPcsCertificates(ca, cert);
+    function upsertPcsCertificates(CA[] calldata ca, bytes[] calldata certs) external returns (bytes32[] memory attestationIds){
+        uint256 certificatesLength = certs.length;
+        require(certificatesLength > 0, EmptyArray());
+        attestationIds = new bytes32[](certificatesLength);
+        for (uint256 i = 0; i < certificatesLength; ++i) {
+            attestationIds[i] = pcsDao.upsertPcsCertificates(ca[i], certs[i]);
+        }
     }
 
     function upsertRootCACrl(bytes calldata rootcacrl) external returns (bytes32 attestationId){

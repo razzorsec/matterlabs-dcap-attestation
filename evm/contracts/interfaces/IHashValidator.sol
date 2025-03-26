@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
+
+error EmptyArray();
+
 /**
  * @title IHashValidator
  * @dev Manages a set of valid hashes with batch operations for efficiency.

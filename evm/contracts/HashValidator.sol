@@ -15,7 +15,6 @@ contract HashValidator is Ownable, IHashValidator {
     event EnclaveHashesUpdated(bytes32[] hashes, bool status);
     event TD10ReportBodyMrHashesUpdated(bytes32[] hashes, bool status);
 
-    error EmptyArray();
 
     constructor(address owner) {
         _initializeOwner(owner);
@@ -56,9 +55,9 @@ contract HashValidator is Ownable, IHashValidator {
     }
 
     /**
-     * @notice Checks if a given enclave hash is valid.
+     * @notice Checks if a given enclave hash is in the valid list.
      * @param hash The hash to check.
-     * @return isValid True if the hash is valid, false otherwise.
+     * @return isValid True if the hash is in the valid list, false otherwise.
      */
     function isValidEnclaveHash(bytes32 hash) external view returns (bool isValid) {
         return validEnclaveHashes[hash];
@@ -100,9 +99,9 @@ contract HashValidator is Ownable, IHashValidator {
     }
 
     /**
-     * @notice Checks if a given TD10ReportBody Mr hash is valid.
+     * @notice Checks if a given TD10ReportBody Mr hash is in the valid list.
      * @param hash The hash to check.
-     * @return isValid True if the hash is valid, false otherwise.
+     * @return isValid True if the hash is in the valid list, false otherwise.
      */
     function isValidTD10ReportBodyMrHash(bytes32 hash) external view returns (bool isValid) {
         return validTD10ReportBodyMrHashes[hash];

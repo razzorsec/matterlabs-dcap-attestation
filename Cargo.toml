@@ -2,7 +2,8 @@
 resolver = "2"
 members = [ 
     "solana/automata-dcap-client",
-    "solana/programs/*"
+    "solana/programs/*",
+    "evm/feedValidator"
 ]
 
 [workspace.package]
@@ -20,6 +21,7 @@ hex = { version = "0.4.3" }
 solana-sdk = { version = "2.1.6" }
 solana-rpc-client = { version = "2.1.6" }
 solana-program = { version = "2.1.6" }
+dotenvy = "0.15"
 
 # Patch zerorize, see: https://github.com/solana-labs/solana/issues/26688
 [patch.crates-io]

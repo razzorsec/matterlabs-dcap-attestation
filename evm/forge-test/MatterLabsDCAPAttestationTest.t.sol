@@ -53,13 +53,17 @@ contract MatterLabsDCAPAttestationTest is Test{
 
         vm.warp(1741083457);
 
-        // upsert rootca
-        attestation.upsertPcsCertificates(CA.ROOT, rootCaDer);
-        // upsert tcb signing ca
-        attestation.upsertPcsCertificates(CA.SIGNING, tcbDer);
+        CA[] memory ca = new CA[](3);
+        ca[0] = CA.ROOT;
+        ca[1] = CA.SIGNING;
+        ca[2] = CA.PLATFORM;
 
-        // upsert Platform intermediate CA
-        attestation.upsertPcsCertificates(CA.PLATFORM, platformDer);
+        bytes[] memory certs = new bytes[](3);
+        certs[0] = rootCaDer; // upsert rootca
+        certs[1] = tcbDer; // upsert tcb signing ca
+        certs[2] = platformDer; // upsert Platform intermediate CA
+        
+        attestation.upsertPcsCertificates(ca, certs);
 
         // upsert rootca crl
         attestation.upsertRootCACrl(rootCrlDer);
@@ -85,7 +89,7 @@ contract MatterLabsDCAPAttestationTest is Test{
         bytes memory signature = hex'c516a2afffc3be34b5f01d9164f5ec0503101dd5ff88b00a5e7488797b495dca385b89eefd66977745a0ce7c56f533f0d587e1ac9b505a4bbdccec8fa636a5be1c';
         bytes32 digest = hex'f55917eb178b9e187178192df60c7928c83d11fc92e81edaf7839c514ed4b85f';
         
-        attestation.verifyAndAttestOnChain(rawQuote, digest, signature, QuoteVerifierType.v3);
+        attestation.verifyAndAttestOnChain(rawQuote, digest, signature);
 
     }
 
@@ -108,7 +112,7 @@ contract MatterLabsDCAPAttestationTest is Test{
         bytes memory signature = hex'c516a2afffc3be34b5f01d9164f5ec0503101dd5ff88b00a5e7488797b495dca385b89eefd66977745a0ce7c56f533f0d587e1ac9b505a4bbdccec8fa636a5be1c';
         bytes32 digest = hex'f55917eb178b9e187178192df60c7928c83d11fc92e81edaf7839c514ed4b85f';
         //To-Do: add valid reportData in the quote to pass the test
-        // attestation.verifyAndAttestOnChain(rawQuote, digest, signature, QuoteVerifierType.v4);
+        attestation.verifyAndAttestOnChain(rawQuote, digest, signature);
 
     }
 
